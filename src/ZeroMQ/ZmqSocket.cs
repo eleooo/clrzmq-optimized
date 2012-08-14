@@ -649,12 +649,8 @@
 
                 int bytesToSend = remaningLength > MaxBufferSize ? MaxBufferSize : remaningLength;
                 Marshal.Copy(buffer, bytesSent, _sendIntPtrBuffer, bytesToSend);
-                int sendFlags = (int)flags;
-                if (remaningLength > MaxBufferSize)
-                {
-                    sendFlags |= (int)SocketFlags.SendMore;
-                }
-                int sent =  _socketProxy.Send(_sendIntPtrBuffer, bytesToSend, sendFlags);
+                
+                int sent = _socketProxy.Send(_sendIntPtrBuffer, bytesToSend, (remaningLength > MaxBufferSize) ? ((int)flags | (int)SocketFlags.SendMore) : (int)flags);
                
                 if (sent < 0)
                 {
