@@ -20,12 +20,12 @@
             throw new NotSupportedException();
         }
 
-        internal override int Receive(byte[] buffer, SocketFlags flags)
+        public override int Receive(byte[] buffer, SocketFlags flags)
         {
             throw new NotSupportedException();
         }
 
-        internal override byte[] Receive(byte[] frame, SocketFlags flags, out int size)
+        public override byte[] Receive(byte[] frame, SocketFlags flags, out int size)
         {
             throw new NotSupportedException();
         }

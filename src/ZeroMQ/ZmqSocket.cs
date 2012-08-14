@@ -2,6 +2,7 @@
 {
     using System;
     using System.Diagnostics;
+    using System.Runtime.InteropServices;
     using System.Threading;
 
     using ZeroMQ.Interop;
@@ -25,6 +26,13 @@
 
         private bool _disposed;
 
+        // Max buffer size
+        public const int MaxBufferSize = 8192;
+
+        private readonly IntPtr _receiveIntPtrBuffer;
+
+        private readonly IntPtr _sendIntPtrBuffer;
+
         internal ZmqSocket(SocketProxy socketProxy, SocketType socketType)
         {
             if (socketProxy == null)
@@ -34,6 +42,8 @@
 
             _socketProxy = socketProxy;
             SocketType = socketType;
+            _receiveIntPtrBuffer = Marshal.AllocHGlobal(MaxBufferSize);
+            _sendIntPtrBuffer = Marshal.AllocHGlobal(MaxBufferSize);
         }
 
         /// <summary>
@@ -42,6 +52,8 @@
         ~ZmqSocket()
         {
             Dispose(false);
+            Marshal.FreeHGlobal(_receiveIntPtrBuffer);
+            Marshal.FreeHGlobal(_sendIntPtrBuffer);
         }
 
         /// <summary>
@@ -500,6 +512,7 @@
             HandleProxyResult(_socketProxy.Close());
         }
 
+        
         /// <summary>
         /// Receive a single message-part from a remote socket in blocking mode.
         /// </summary>
@@ -545,6 +558,9 @@
                        ? Receive(buffer)
                        : ExecuteWithTimeout(() => Receive(buffer, SocketFlags.DontWait), timeout);
         }
+
+        
+       
 
         /// <summary>
         /// Receive a single message-part from a remote socket in blocking mode.
@@ -624,28 +640,48 @@
             {
                 throw new ArgumentOutOfRangeException("size", "Expected a non-negative value less than or equal to the buffer length.");
             }
+            
+            var bytesSent = 0;
 
-            int sentBytes = _socketProxy.Send(buffer, size, (int)flags);
-
-            if (sentBytes >= 0)
+            do
             {
-                SendStatus = (sentBytes == size || LibZmq.MajorVersion < LatestVersion) ? SendStatus.Sent : SendStatus.Incomplete;
-                return sentBytes;
-            }
+                int remaningLength = size - bytesSent;
 
-            if (ErrorProxy.ShouldTryAgain)
+                int bytesToSend = remaningLength > MaxBufferSize ? MaxBufferSize : remaningLength;
+                Marshal.Copy(buffer, bytesSent, _sendIntPtrBuffer, bytesToSend);
+                int sendFlags = (int)flags;
+                if (remaningLength > MaxBufferSize)
+                {
+                    sendFlags |= (int)SocketFlags.SendMore;
+                }
+                int sent =  _socketProxy.Send(_sendIntPtrBuffer, bytesToSend, sendFlags);
+               
+                if (sent < 0)
+                {
+                    if (ErrorProxy.ShouldTryAgain)
+                    {
+                        SendStatus = SendStatus.TryAgain;
+                        return -1;
+                    }
+
+                    if (ErrorProxy.ContextWasTerminated)
+                    {
+                        SendStatus = SendStatus.Interrupted;
+                        return -1;
+                    }
+
+                    throw new ZmqSocketException(ErrorProxy.GetLastError());
+                }
+                bytesSent += sent;
+
+            }
+            while (bytesSent < size);
+            if (bytesSent >= 0)
             {
-                SendStatus = SendStatus.TryAgain;
-                return -1;
+                SendStatus = (bytesSent == size || LibZmq.MajorVersion < LatestVersion) ? SendStatus.Sent : SendStatus.Incomplete;
+                
             }
-
-            if (ErrorProxy.ContextWasTerminated)
-            {
-                SendStatus = SendStatus.Interrupted;
-                return -1;
-            }
-
-            throw new ZmqSocketException(ErrorProxy.GetLastError());
+            return bytesSent;
         }
 
         /// <summary>
@@ -794,19 +830,28 @@
             GC.SuppressFinalize(this);
         }
 
-        internal virtual int Receive(byte[] buffer, SocketFlags flags)
+        
+        
+
+        public virtual int Receive(byte[] buffer, SocketFlags flags)
         {
             EnsureNotDisposed();
 
-            if (buffer == null)
-            {
-                throw new ArgumentNullException("buffer");
-            }
-
-            int receivedBytes = _socketProxy.Receive(buffer, (int)flags);
+           
+            //rjoshi  added optimized call
+           //    int receivedBytes = _socketProxy.Receive(buffer, (int)flags);
+            int receivedBytes = _socketProxy.Receive(_receiveIntPtrBuffer, MaxBufferSize, (int)flags);
 
             if (receivedBytes >= 0)
             {
+                if (buffer == null || buffer.Length < receivedBytes)
+                {
+                    buffer = new byte[receivedBytes];
+                }
+                if (receivedBytes > 0)
+                {
+                    Marshal.Copy(_receiveIntPtrBuffer, buffer, 0, receivedBytes);
+                }
                 ReceiveStatus = ReceiveStatus.Received;
                 return receivedBytes;
             }
@@ -826,19 +871,24 @@
             throw new ZmqSocketException(ErrorProxy.GetLastError());
         }
 
-        internal virtual byte[] Receive(byte[] buffer, SocketFlags flags, out int size)
+        public virtual byte[] Receive(byte[] buffer, SocketFlags flags, out int size)
         {
             EnsureNotDisposed();
 
-            if (buffer == null)
-            {
-                buffer = new byte[0];
-            }
-
-            buffer = _socketProxy.Receive(buffer, (int)flags, out size);
-
+            //rjoshi added optimized call
+            size = _socketProxy.Receive(_receiveIntPtrBuffer, MaxBufferSize, (int)flags);
+            //buffer = _socketProxy.Receive(buffer, (int)flags, out size);
+            
             if (size >= 0)
             {
+                if (buffer == null || buffer.Length < size)
+                {
+                    buffer = new byte[size];
+                }
+                if (size > 0)
+                {
+                    Marshal.Copy(_receiveIntPtrBuffer, buffer, 0, size);
+                }
                 ReceiveStatus = ReceiveStatus.Received;
                 return buffer;
             }
@@ -1032,6 +1082,13 @@
             TResult receiveResult;
 
             var timeoutMilliseconds = (int)timeout.TotalMilliseconds;
+            //rjoshi: if timeout less than 1 than execute only once
+            //this will be a workaround to avoid spinwait/timer overhead when application handled the timeout
+            if(timeoutMilliseconds < 1)
+            {
+                return method();
+            }
+
             var timer = Stopwatch.StartNew();
             var spin = new SpinWait();
 

@@ -11,6 +11,8 @@
         // From options.hpp: unsigned char identity [256];
         private const int MaxBinaryOptionSize = 255;
 
+        
+
         private bool _disposed;
 
         public SocketProxy(IntPtr socketHandle, Action<IntPtr> socketClosed)
@@ -27,11 +29,14 @@
 
             SocketHandle = socketHandle;
             _socketClosed = socketClosed;
+
+           
         }
 
         ~SocketProxy()
         {
             Dispose(false);
+            
         }
 
         public IntPtr SocketHandle { get; private set; }
@@ -71,6 +76,20 @@
 
             return rc;
         }
+       /// <summary>
+        /// Optimized Receive function which passed raw buffer to the libzmq
+        /// NOTE: If receive size is more than MaxBufferSize(8192), it will read only 8192 size
+       /// </summary>
+       /// <param name="receiveIntPtrBuffer"></param>
+       /// <param name="bufferSize"></param>
+       /// <param name="flags"></param>
+       /// <returns></returns>
+        public int Receive(IntPtr receiveIntPtrBuffer, int bufferSize, int flags)
+        {
+            return RetryIfInterrupted(() => LibZmq.zmq_buffer_recv(SocketHandle, receiveIntPtrBuffer, bufferSize, flags));
+        }
+       
+
 
         public int Receive(byte[] buffer, int flags)
         {
@@ -173,7 +192,17 @@
                 return bytesSent;
             }
         }
-
+        /// <summary>
+        /// Optimized Send function which passes raw buffer to the libzmq
+        /// </summary>
+        /// <param name="sendIntPtrBuffer"></param>
+        /// <param name="bytesToSend"></param>
+        /// <param name="flags"></param>
+        /// <returns></returns>
+        public int Send(IntPtr sendIntPtrBuffer, int bytesToSend, int flags)
+        {
+            return RetryIfInterrupted(() => LibZmq.zmq_buffer_send(SocketHandle, sendIntPtrBuffer, bytesToSend, flags));
+        }
         public int Forward(IntPtr destinationHandle)
         {
             using (var message = new ZmqMsgT())
