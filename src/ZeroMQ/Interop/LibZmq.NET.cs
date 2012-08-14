@@ -58,13 +58,13 @@ namespace ZeroMQ.Interop
 
                 var zmq_msg_recv_impl = NativeLib.GetUnmanagedFunction<ZmqMsgRecvProc>("zmq_msg_recv");
                 zmq_msg_recv = zmq_msg_recv_impl;
-                //used to receive raw buffer
+                //used to receive raw buffer (rjoshi)
                 var zmq_buffer_recv_impl = NativeLib.GetUnmanagedFunction<ZmqBufferRecvProc>("zmq_recv");
                 zmq_buffer_recv = zmq_buffer_recv_impl;
 
                 var zmq_msg_send_impl = NativeLib.GetUnmanagedFunction<ZmqMsgSendProc>("zmq_msg_send");
                 zmq_msg_send = zmq_msg_send_impl;
-                //used to send raw buffer
+                //used to send raw buffer (rjoshi)
                 var zmq_buffer_send_impl = NativeLib.GetUnmanagedFunction<ZmqBufferSendProc>("zmq_send");
                 zmq_buffer_send = zmq_buffer_send_impl;
                 
