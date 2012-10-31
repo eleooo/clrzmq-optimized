@@ -1,5 +1,23 @@
-# clrzmq &mdash; Official 0MQ Bindings for .NET and Mono
-*(Formerly clrzmq2; legacy bindings have moved to [clrzmq-old][clrzmq-old])*
+# clrzmq-optimized &mdash; optimized 0MQ Bindings for .NET and Mono
+
+-----------------------------------------------------------
+Update: These changes have been merged with master branch. So please use master branch https://github.com/zeromq/clrzmq
+----------------------------------------------------------
+Welcome to the clrzmq-optimized wiki!
+
+This forked version of clrzmq is optimized for low end devices. You can see the different in CPU usage.
+
+clrzmq:
+
+https://docs.google.com/open?id=0Bz_UeFnokXJVZVdNV1ZMWDJsWDg
+
+SocketProxy.Receive() uses 13142.42 CPU ticks
+
+clrzmq-optimized:
+
+https://docs.google.com/open?id=0Bz_UeFnokXJVekI4OEhNN3pUR1E
+
+SocketProxy.Receive() uses 2696.54 CPU ticks
 
 This project aims to provide the full functionality of the underlying ZeroMQ API to CLR projects.
 
